@@ -1,5 +1,5 @@
 /* ===========================================================
-   하루상점 — 화면을 그리고 장바구니를 다루는 코드
+   유라문구 — 화면을 그리고 장바구니를 다루는 코드
    이 파일은 고치지 않아도 됩니다. (상품은 shop.js 에 있습니다)
    =========================================================== */
 
@@ -47,7 +47,7 @@ const Cart = {
 function paintChrome() {
   // 화면마다 제목이 달라야 검색에서 구분됩니다.
   // 그래서 제목을 통째로 바꾸지 않고 가게 이름만 갈아 끼웁니다.
-  document.title = document.title.replaceAll("하루상점", SHOP.name);
+  document.title = document.title.replaceAll("유라문구", SHOP.name);
 
   const brand = document.querySelector(".brand");
   if (brand) brand.textContent = SHOP.name;
@@ -82,7 +82,7 @@ function paintDetail() {
   if (!box) return;
 
   const p = findProduct(qs("id"));
-  if (!p) { box.innerHTML = '<p class="empty">그런 상품이 없습니다.</p>'; return; }
+  if (!p) { box.innerHTML = '<p class="empty">찾으시는 문구가 없습니다.</p>'; return; }
 
   document.title = p.name + " — " + SHOP.name;
   box.innerHTML = `
@@ -91,7 +91,7 @@ function paintDetail() {
       <h1>${p.name}</h1>
       <div class="price">${won(p.price)}</div>
       <div class="body prose">${p.detail.map(t => `<p>${t}</p>`).join("")}</div>
-      <button class="btn" id="add-to-cart">장바구니에 담기</button>
+      <button class="btn" id="add-to-cart">장바구니에 담아 두기</button>
     </div>`;
 
   document.querySelector("#add-to-cart").addEventListener("click", () => {
@@ -107,13 +107,13 @@ function paintCart() {
 
   const items = Cart.read();
   if (items.length === 0) {
-    box.innerHTML = '<p class="empty">장바구니가 비어 있습니다.</p>';
+    box.innerHTML = '<p class="empty">아직 담아 두신 문구가 없습니다.</p>';
     return;
   }
 
   box.innerHTML = `
     <table class="cart">
-      <tr><th>상품</th><th>수량</th><th>금액</th><th></th></tr>
+      <tr><th>문구</th><th>수량</th><th>금액</th><th></th></tr>
       ${items.map(i => {
         const p = findProduct(i.id);
         if (!p) return "";
