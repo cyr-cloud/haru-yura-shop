@@ -177,6 +177,34 @@ function paintCheckout() {
   if (!form) return;
 
   // ▼ 여기에 「결제를 시작했다」를 알리는 코드가 들어갑니다 (뒤 수업에서)
+  // 장바구니에 담긴 상품마다 상품 목록에서 이름과 가격을 찾아 상자로 만든다
+  const checkoutItems = Cart.read().map(i => {
+    const p = findProduct(i.id);
+    return p ? { item_id: p.id, item_name: p.name, price: p.price, quantity: i.qty } : null;
+  }).filter(Boolean);
+  // 결제 화면이 열린 순간의 장바구니 합계 - 가격 × 수량의 합, 배송비 없음
+  const checkoutTotal = Cart.total();
+
+  // 통로가 이미 있으면 그대로 쓰고, 없을 때만 새로 만든다
+  window.dataLayer = window.dataLayer || [];
+  // 앞에서 넣은 상품 값이 섞이지 않게 먼저 비운다
+  dataLayer.push({ ecommerce: null });
+  // 통로 끝에 한 덩어리를 넣는다 - 넣는 순간이 태그 관리자가 듣는 순간
+  dataLayer.push({
+    // 무슨 일이 일어났나 - 계획서 이름 글자 그대로
+    event: "begin_checkout",
+    // 합계가 50000원 이상이면 무료 배송 - ecommerce 밖에 둔다
+    free_shipping: checkoutTotal >= 50000 ? "yes" : "no",
+    // 같이 보내는 상품 값 묶음
+    ecommerce: {
+      // 어느 나라 돈인가
+      currency: "KRW",
+      // 금액 - 장바구니 상품 합계
+      value: checkoutTotal,
+      // 장바구니에 담긴 상품 상자 전체
+      items: checkoutItems
+    }
+  });
 
   const sum = document.querySelector("#pay-total");
   if (sum) sum.textContent = won(Cart.total());
