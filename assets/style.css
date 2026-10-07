@@ -120,3 +120,17 @@ footer.site{border-top:2px solid var(--ink);background:var(--card);
   .auth-nav{gap:10px}
   .auth-nav .auth-who{max-width:120px}
 }
+
+/* --- 숨기라고 한 단추는 숨습니다
+       (.btn 의 display:inline-block 이 hidden 을 덮으므로 다시 적어 줍니다) --- */
+.btn[hidden]{display:none}
+.btn:disabled{opacity:.55;cursor:default}
+
+/* --- 마이페이지의 인증 안내 한 줄 --- */
+.panel .verify-note{margin:0 0 16px;padding:12px 14px;font-size:13.5px;line-height:1.7;
+  background:#fbf6e9;border-left:3px solid #b8872b}
+.panel .btn{margin:0 8px 0 0}
+
+/* --- 화면을 옮겨 온 뒤 한 번 보여 주는 한 줄 (auth.js 가 붙입니다) --- */
+.auth-flash{margin:0 0 28px;padding:14px 18px;font-size:14px;line-height:1.7;
+  background:var(--card);border-left:4px solid var(--accent)}

@@ -9,6 +9,7 @@ import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebase
 import {
   getAuth,
   onAuthStateChanged,
+  sendEmailVerification,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
@@ -26,6 +27,10 @@ const firebaseConfig = {
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+
+// Firebase 가 보내는 메일을 한국어로 보냅니다.
+// 이 값을 정해 두면 Firebase 가 한국어 본문으로 보냅니다.
+auth.languageCode = "ko";
 
 /* --- 2. 로그인했는지 묻는 자리 - 가게 전체에서 여기 한 곳뿐입니다 --- */
 
@@ -75,7 +80,27 @@ export async function logout() {
   location.href = "index.html";
 }
 
-/* --- 4. 로그인한 사람만 볼 화면을 지킵니다 --- */
+/* --- 4. 인증 메일 --- */
+
+/**
+ * 인증 메일을 한 통 보냅니다.
+ * 기다렸다가 쓰면 보내기가 끝난 뒤에 다음 줄이 돌아갑니다.
+ */
+export function sendVerifyMail(user) {
+  return sendEmailVerification(user);
+}
+
+/**
+ * 메일 보내기가 안 됐을 때 보여 줄 한 줄로 바꿉니다.
+ * 너무 자주 눌러 막힌 경우만 우리 말로 바꾸고, 나머지는 오류 코드 글자 그대로 둡니다.
+ */
+export function mailErrorLine(error) {
+  const code = error && error.code ? error.code : String(error);
+  if (code === "auth/too-many-requests") return "잠시 뒤에 다시 눌러 주세요.";
+  return code;
+}
+
+/* --- 5. 로그인한 사람만 볼 화면을 지킵니다 --- */
 
 // ?next= 에 붙은 값은 이 가게 안의 화면 이름일 때만 씁니다.
 // 바깥 주소를 적어 보내는 장난을 막기 위한 확인입니다.
@@ -99,6 +124,7 @@ function hereName() {
  * 로그인한 사람만 볼 화면에서 부릅니다.
  * 로그인하지 않았으면 가려던 화면 이름을 달고 로그인 화면으로 보냅니다.
  * 확인이 끝나기 전에는 show 를 부르지 않으므로, 내용이 미리 보이지 않습니다.
+ * 메일 인증 여부는 보지 않습니다 - 인증 안 된 계정도 들어올 수 있습니다.
  */
 export function requireUser(show) {
   onUser(user => {
@@ -112,7 +138,7 @@ export function requireUser(show) {
   });
 }
 
-/* --- 5. 머리글의 로그인 자리 --- */
+/* --- 6. 머리글의 로그인 자리 --- */
 function paintAuthNav(user) {
   const slot = document.querySelector("#auth-nav");
   if (!slot) return;
@@ -134,3 +160,42 @@ function paintAuthNav(user) {
   // 확인이 끝났으니 이제 보여 줍니다 (그 전에는 숨어 있습니다)
   slot.hidden = false;
 }
+
+/* --- 7. 화면을 옮겨 가며 한 줄 전하기 --- */
+// 가입을 마치고 다른 화면으로 넘어간 뒤에도 한 줄을 보여 주어야 해서,
+// 넘어가기 전에 적어 두고 넘어간 화면에서 꺼내 씁니다. 한 번 보여 주면 지웁니다.
+const FLASH_KEY = "haru_auth_flash";
+
+/** 다음 화면에서 한 번 보여 줄 한 줄을 적어 둡니다 */
+export function setFlash(text) {
+  try {
+    sessionStorage.setItem(FLASH_KEY, text);
+  } catch (error) {
+    /* 저장을 막아 둔 브라우저면 그냥 넘어갑니다 */
+  }
+}
+
+/** 적어 둔 한 줄을 꺼내고 지웁니다 (없으면 null) */
+function takeFlash() {
+  try {
+    const text = sessionStorage.getItem(FLASH_KEY);
+    sessionStorage.removeItem(FLASH_KEY);
+    return text;
+  } catch (error) {
+    return null;
+  }
+}
+
+// 적어 둔 한 줄이 있으면 본문 맨 위에 한 번 보여 줍니다
+(function paintFlash() {
+  const text = takeFlash();
+  if (!text) return;
+  const box = document.querySelector("main .wrap");
+  if (!box) return;
+  const line = document.createElement("p");
+  line.className = "auth-flash";
+  line.setAttribute("role", "status");
+  // 글자로만 넣습니다 - HTML 로 넣지 않습니다
+  line.textContent = text;
+  box.prepend(line);
+})();
