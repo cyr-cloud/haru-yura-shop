@@ -33,6 +33,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <a href="about.html">가게 이야기</a>
     <a href="shipping.html">배송과 교환</a>
     <a href="cart.html">장바구니<span class="cart-count">0</span></a>
+    <span class="auth-nav" id="auth-nav" hidden></span>
   </nav>
 </div></header>
 
@@ -60,34 +61,25 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <footer class="site"><div class="wrap"></div></footer>
 <script src="assets/shop.js"></script>
 <script src="assets/app.js"></script>
+<script type="module" src="assets/auth.js"></script>
 
 <script type="module">
-  // index.html 에 넣어 둔 것과 같은 버전, 같은 값입니다
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+  // 로그인했는지 묻는 자리(onAuthStateChanged)는 assets/auth.js 한 곳뿐입니다.
+  // 이 화면은 거기서 만들어 둔 auth 와 그 결과만 받아 씁니다.
+  import { auth, onUser, nextTarget } from "./assets/auth.js";
   import {
-    getAuth,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged
+    signOut
   } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyB2-PKanGft-tIZ8EKY-F0k4_J5d0TGxTQ",
-    authDomain: "haru-shop-602ec.firebaseapp.com",
-    projectId: "haru-shop-602ec",
-    storageBucket: "haru-shop-602ec.firebasestorage.app",
-    messagingSenderId: "611286084304",
-    appId: "1:611286084304:web:25619a81bdf5811c4b4cd5"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
 
   const emailBox = document.querySelector("#email");
   const passwordBox = document.querySelector("#password");
   const msg = document.querySelector("#auth-msg");
   const stateLine = document.querySelector("#auth-state");
+
+  // 로그인하지 않아 여기로 돌려보내졌다면, 가려던 화면 이름이 주소의 ?next= 에 붙어 있습니다
+  const next = nextTarget();
 
   // 한 줄만 보여 줍니다 - 잘 됐으면 무엇이 됐는지, 안 됐으면 오류 코드 글자 그대로
   function say(text) {
@@ -98,6 +90,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   function sayError(error) {
     say(error && error.code ? error.code : String(error));
   }
+
+  if (next) say("로그인하시면 " + next + " 으로 다시 보내 드립니다");
 
   document.querySelector("#btn-signup").addEventListener("click", async () => {
     say("가입하는 중입니다");
@@ -132,9 +126,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     }
   });
 
-  // 지금 들어와 있는지 아닌지를 적어 둡니다
-  onAuthStateChanged(auth, user => {
+  // 지금 들어와 있는지 아닌지를 적어 둡니다 - 결과는 auth.js 가 알려 줍니다
+  onUser(user => {
     stateLine.textContent = user ? "지금 들어와 있는 계정: " + user.email : "지금은 들어와 있지 않습니다";
+    // 들어왔고 원래 가려던 화면이 있으면 그리로 다시 보냅니다
+    if (user && next) location.replace(next);
   });
 </script>
 </body>
