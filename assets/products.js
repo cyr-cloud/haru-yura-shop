@@ -14,6 +14,8 @@ import {
   doc,
   query,
   where,
+  orderBy,
+  limit,
   getDocsFromServer,
   getDocFromServer,
   runTransaction,
@@ -57,13 +59,18 @@ async function paintList() {
   if (!box) return;
 
   try {
-    // 보이기로 둔 상품만 서버에서 읽습니다 - 읽은 문서 수가 곧 받아 온 문서 수입니다
-    const snap = await getDocsFromServer(query(collection(db, "products"), where("isVisible", "==", true)));
+    // 숨기지 않은 상품만 · 가격이 싼 것부터 · 셋만, Firestore 쿼리에서 고르고 정렬해 받아 옵니다.
+    // 이 쿼리는 isVisible + price 복합 색인이 있어야 돌아갑니다 (색인은 콘솔에서 만듭니다)
+    const snap = await getDocsFromServer(query(
+      collection(db, "products"),
+      where("isVisible", "==", true),
+      orderBy("price", "asc"),
+      limit(3)
+    ));
+    // 이번에 서버에서 실제로 받아 온 장수입니다
     sayReads(snap.size);
 
-    // shop.js 에 적힌 순서(p1~p6)대로 늘어놓습니다
-    const order = id => PRODUCTS.findIndex(p => p.id === id);
-    const docs = snap.docs.slice().sort((a, b) => order(a.id) - order(b.id));
+    const docs = snap.docs;
 
     if (docs.length === 0) {
       box.innerHTML = '<p class="empty">아직 올려 둔 문구가 없습니다.</p>';
@@ -83,8 +90,9 @@ async function paintList() {
     </a>`;
     }).join("");
   } catch (error) {
-    box.innerHTML = '<p class="empty"></p>';
-    box.querySelector(".empty").textContent = errorLine(error);
+    // 오류 글은 줄이지 않고 콘솔에 그대로, 화면에는 한 줄만
+    console.error(error);
+    box.innerHTML = '<p class="empty">목록을 불러오지 못했습니다</p>';
   }
 }
 
