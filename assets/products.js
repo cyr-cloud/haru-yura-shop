@@ -16,6 +16,7 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   getDocsFromServer,
   getDocFromServer,
   runTransaction,
@@ -54,21 +55,61 @@ const domReady = new Promise(resolve => {
 });
 
 /* --- 상품 목록 --- */
+
+// 한 번에 가져오는 장수
+const PAGE = 3;
+// 지금 화면에 보이는 마지막 상품 - "더 보기" 는 이 다음부터 가져옵니다
+let lastDoc = null;
+// 이 목록을 그리려고 지금까지 받아 온 장수 (첫 셋 + 더 보기로 받은 것)
+let listReads = 0;
+
+// 숨기지 않은 상품만 · 가격이 싼 것부터 · 셋만, Firestore 쿼리에서 고르고 정렬해 받아 옵니다.
+// after 를 주면 그 상품 바로 다음부터 셋을 받습니다.
+// 이 쿼리는 isVisible + price 복합 색인이 있어야 돌아갑니다 (색인은 콘솔에서 만듭니다)
+function pageQuery(after) {
+  const parts = [
+    collection(db, "products"),
+    where("isVisible", "==", true),
+    orderBy("price", "asc")
+  ];
+  if (after) parts.push(startAfter(after));
+  parts.push(limit(PAGE));
+  return query(...parts);
+}
+
+function cardHtml(d) {
+  const p = d.data();
+  const local = findProduct(d.id);
+  return `
+    <a class="card" href="product.html?id=${encodeURIComponent(d.id)}">
+      <div class="thumb">${local ? local.emoji : ""}</div>
+      <h3>${esc(p.name)}</h3>
+      <p class="sum">${esc(p.summary)}</p>
+      <div class="price">${won(Number(p.price))}</div>
+      <p class="stock">${stockLine(Number(p.stock))}</p>
+    </a>`;
+}
+
+// 셋보다 적게 왔으면 더 가져올 것이 없으므로 버튼을 숨깁니다
+function setMoreButton(gotCount) {
+  const btn = document.querySelector("#btn-more");
+  if (btn) btn.hidden = gotCount < PAGE;
+}
+
 async function paintList() {
   const box = document.querySelector("#product-list");
   if (!box) return;
 
+  // 처음부터 다시 그립니다 (화면을 열 때, 상품을 올린 뒤)
+  lastDoc = null;
+  listReads = 0;
+  setMoreButton(0);
+
   try {
-    // 숨기지 않은 상품만 · 가격이 싼 것부터 · 셋만, Firestore 쿼리에서 고르고 정렬해 받아 옵니다.
-    // 이 쿼리는 isVisible + price 복합 색인이 있어야 돌아갑니다 (색인은 콘솔에서 만듭니다)
-    const snap = await getDocsFromServer(query(
-      collection(db, "products"),
-      where("isVisible", "==", true),
-      orderBy("price", "asc"),
-      limit(3)
-    ));
+    const snap = await getDocsFromServer(pageQuery(null));
     // 이번에 서버에서 실제로 받아 온 장수입니다
-    sayReads(snap.size);
+    listReads = snap.size;
+    sayReads(listReads);
 
     const docs = snap.docs;
 
@@ -77,23 +118,45 @@ async function paintList() {
       return;
     }
 
-    box.innerHTML = docs.map(d => {
-      const p = d.data();
-      const local = findProduct(d.id);
-      return `
-    <a class="card" href="product.html?id=${encodeURIComponent(d.id)}">
-      <div class="thumb">${local ? local.emoji : ""}</div>
-      <h3>${esc(p.name)}</h3>
-      <p class="sum">${esc(p.summary)}</p>
-      <div class="price">${won(Number(p.price))}</div>
-      <p class="stock">${stockLine(Number(p.stock))}</p>
-    </a>`;
-    }).join("");
+    box.innerHTML = docs.map(cardHtml).join("");
+    lastDoc = docs[docs.length - 1];
+    setMoreButton(docs.length);
   } catch (error) {
     // 오류 글은 줄이지 않고 콘솔에 그대로, 화면에는 한 줄만
     console.error(error);
     box.innerHTML = '<p class="empty">목록을 불러오지 못했습니다</p>';
   }
+}
+
+/* --- 더 보기 --- */
+function setupMore() {
+  const btn = document.querySelector("#btn-more");
+  const box = document.querySelector("#product-list");
+  const msg = document.querySelector("#more-msg");
+  if (!btn || !box) return;
+
+  btn.addEventListener("click", async () => {
+    if (!lastDoc) return;
+    btn.disabled = true;
+    msg.textContent = "";
+    try {
+      // 지금 보이는 마지막 상품 다음부터 셋을 더 받아 옵니다
+      const snap = await getDocsFromServer(pageQuery(lastDoc));
+      // 읽은 장수는 지금까지 받은 것에 더합니다
+      listReads += snap.size;
+      sayReads(listReads);
+
+      // 아래에 이어 붙입니다
+      box.insertAdjacentHTML("beforeend", snap.docs.map(cardHtml).join(""));
+      if (snap.size) lastDoc = snap.docs[snap.size - 1];
+      setMoreButton(snap.size);
+    } catch (error) {
+      // 오류 글은 줄이지 않고 콘솔에 그대로, 화면에는 한 줄만 (이미 보이는 상품은 그대로 둡니다)
+      console.error(error);
+      msg.textContent = "목록을 불러오지 못했습니다";
+    }
+    btn.disabled = false;
+  });
 }
 
 /* --- 상품 상세 --- */
@@ -171,6 +234,7 @@ function setupSeed() {
 
 domReady.then(() => {
   paintList();
+  setupMore();
   paintDetail();
   setupSeed();
 });

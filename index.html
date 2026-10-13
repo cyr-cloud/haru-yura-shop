@@ -46,6 +46,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <h2>지금 두고 있는 문구</h2>
   <p class="lead">여섯 가지를 골라 두었습니다. 하나씩 눌러 보시면 어떻게 쓰는 물건인지 적어 두었습니다.</p>
   <div class="grid" id="product-list"></div>
+  <!-- 지금 보이는 마지막 상품 다음부터 셋을 더 가져옵니다. 더 가져올 것이 없으면 숨습니다 -->
+  <button class="btn ghost" type="button" id="btn-more" hidden>더 보기</button>
+  <p id="more-msg" role="status" aria-live="polite"></p>
   <p class="lead" id="read-count"></p>
 
   <!-- 로그인한 사람에게만 보입니다. 누르면 shop.js 의 p2~p6 을 Firestore 에 올립니다 -->
