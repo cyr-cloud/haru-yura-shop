@@ -39,6 +39,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
 <main><div class="wrap">
   <div class="detail" id="product-detail"></div>
+
+  <!-- 상품이 제대로 보일 때만 꺼냅니다. 재고 확인 · 주문 문서 쓰기 · 재고 차감을 한 번에 합니다 -->
+  <button class="btn" type="button" id="btn-order" hidden>바로 주문</button>
+  <p id="order-msg" role="status" aria-live="polite"></p>
+
   <p class="lead" id="read-count"></p>
 </div></main>
 <footer class="site"><div class="wrap"></div></footer>
