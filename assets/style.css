@@ -134,3 +134,8 @@ footer.site{border-top:2px solid var(--ink);background:var(--card);
 /* --- 화면을 옮겨 온 뒤 한 번 보여 주는 한 줄 (auth.js 가 붙입니다) --- */
 .auth-flash{margin:0 0 28px;padding:14px 18px;font-size:14px;line-height:1.7;
   background:var(--card);border-left:4px solid var(--accent)}
+
+/* 재고 한 줄과 읽은 문서 수 한 줄 */
+.card .stock{margin:6px 0 0;font-size:13px;color:var(--sub)}
+.detail .stock{margin:0 0 24px;color:var(--sub)}
+#read-count{margin:20px 0 24px;font-size:13px}

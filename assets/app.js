@@ -86,13 +86,8 @@ function paintList() {
   document.querySelector("#hero-title").textContent = SHOP.name;
   document.querySelector("#hero-tagline").textContent = SHOP.tagline;
 
-  box.innerHTML = PRODUCTS.map(p => `
-    <a class="card" href="product.html?id=${p.id}">
-      <div class="thumb">${p.emoji}</div>
-      <h3>${p.name}</h3>
-      <p class="sum">${p.summary}</p>
-      <div class="price">${won(p.price)}</div>
-    </a>`).join("");
+  // 카드는 Firestore 의 products 를 읽어 assets/products.js 가 그립니다
+  box.innerHTML = '<p class="empty">문구를 불러오는 중입니다.</p>';
 }
 
 /* --- 상품 상세 --- */
@@ -104,11 +99,15 @@ function paintDetail() {
   if (!p) { box.innerHTML = '<p class="empty">찾으시는 문구가 없습니다.</p>'; return; }
 
   document.title = p.name + " — " + SHOP.name;
+  // 이름 · 가격 · 한 줄 소개 · 재고는 Firestore 에서 읽어 assets/products.js 가 채웁니다.
+  // 그림(emoji)과 긴 설명(detail)은 지금처럼 shop.js 에서 읽습니다.
   box.innerHTML = `
     <div class="thumb">${p.emoji}</div>
     <div>
-      <h1>${p.name}</h1>
-      <div class="price">${won(p.price)}</div>
+      <h1 id="detail-name">불러오는 중입니다</h1>
+      <p class="sum" id="detail-summary"></p>
+      <div class="price" id="detail-price"></div>
+      <p class="stock" id="detail-stock"></p>
       <div class="body prose">${p.detail.map(t => `<p>${t}</p>`).join("")}</div>
       <button class="btn" id="add-to-cart">장바구니에 담아 두기</button>
     </div>`;
