@@ -18,6 +18,10 @@ import {
 const db = getFirestore(getApp());
 
 const box = document.querySelector("#order-list");
+const stoppedLine = document.querySelector("#orders-stopped");
+
+// 이 값이면 주문이 끝난 것입니다 - 더 바뀔 일이 없습니다
+const DONE = ["delivered", "canceled"];
 
 // 지금 걸려 있는 리스너를 끄는 함수 (안 걸려 있으면 null)
 let stopListening = null;
@@ -97,6 +101,19 @@ function listen(uid) {
     const changed = snap.docChanges().map(c => c.type + " " + c.doc.id).join(", ");
     console.log("[주문 알림] 내 주문 " + snap.size + "건 · 이번에 바뀐 것: " + (changed || "없음"));
     paintOrders(snap);
+
+    // 내 주문이 전부 끝났으면 더 바뀔 일이 없으므로 그만 듣습니다.
+    // 하나라도 paid · preparing · shipped 처럼 끝나지 않은 값이면 계속 듣습니다.
+    // 주문이 한 건도 없을 때는 새 주문이 들어올 수 있으므로 계속 듣습니다.
+    const allDone = !snap.empty && snap.docs.every(d => DONE.includes(d.data().status));
+    if (allDone && stopListening) {
+      // onSnapshot 이 돌려준 함수를 부르면 리스너가 해제됩니다.
+      // listeningUid 는 그대로 두므로, 새로 고치기 전에는 다시 걸리지 않습니다.
+      stopListening();
+      stopListening = null;
+      console.log("[그만 듣기] 내 주문 " + snap.size + "건이 모두 delivered 또는 canceled 라서 리스너를 해제했습니다");
+      if (stoppedLine) stoppedLine.hidden = false;
+    }
   }, error => {
     // 오류 글은 줄이지 않고 콘솔에 그대로, 화면에는 한 줄만
     console.error(error);
@@ -114,6 +131,7 @@ if (box) {
     // 사람이 바뀌었거나 나갔으면 걸어 둔 것을 끕니다
     if (stopListening) { stopListening(); stopListening = null; }
     listeningUid = uid;
+    if (stoppedLine) stoppedLine.hidden = true;
     if (uid) listen(uid);
   });
 }

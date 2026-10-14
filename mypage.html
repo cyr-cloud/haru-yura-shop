@@ -64,6 +64,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- 내 주문 - assets/orders.js 가 Firestore 의 orders 를 실시간으로 들어 채웁니다 -->
     <h2 id="orders-title">내 주문</h2>
     <div id="order-list"><p class="empty">주문을 불러오는 중입니다.</p></div>
+    <!-- 내 주문이 전부 끝나 리스너를 해제한 순간에만 hidden 이 풀립니다 -->
+    <p class="lead" id="orders-stopped" role="status" aria-live="polite" hidden>모든 주문이 끝나 실시간 확인을 멈췄습니다. 새로 고치면 다시 확인합니다.</p>
   </div>
 
 </div></main>

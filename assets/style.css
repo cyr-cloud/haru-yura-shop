@@ -144,3 +144,4 @@ footer.site{border-top:2px solid var(--ink);background:var(--card);
 
 /* --- 마이페이지의 내 주문 목록 (orders.js 가 채웁니다) --- */
 #orders-title{margin-top:48px}
+#orders-stopped{margin:16px 0 0;font-size:13px}
