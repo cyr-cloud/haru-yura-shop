@@ -145,3 +145,17 @@ footer.site{border-top:2px solid var(--ink);background:var(--card);
 /* --- 마이페이지의 내 주문 목록 (orders.js 가 채웁니다) --- */
 #orders-title{margin-top:48px}
 #orders-stopped{margin:16px 0 0;font-size:13px}
+
+/* 주문 상태 - 손님이 읽는 말 한 줄과 네 단계 줄 */
+.order-status .status-label{display:block;font-size:14px;color:var(--accent)}
+.order-status.is-canceled .status-label{color:var(--sub)}
+.status-steps{display:flex;gap:4px;list-style:none;margin:10px 0 0;padding:0}
+.status-steps li{flex:1;min-width:0;padding:6px 4px 0;border-top:4px solid var(--line);
+  font-size:11.5px;line-height:1.4;color:var(--sub);white-space:nowrap}
+.status-steps li.done{border-top-color:var(--accent);opacity:.55}
+.status-steps li.now{border-top-color:var(--accent);color:var(--accent);font-weight:700}
+@media (max-width:640px){
+  .status-steps{flex-direction:column;gap:2px}
+  .status-steps li{border-top:0;border-left:4px solid var(--line);padding:2px 0 2px 8px}
+  .status-steps li.done,.status-steps li.now{border-left-color:var(--accent)}
+}

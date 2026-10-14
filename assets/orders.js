@@ -53,6 +53,58 @@ function totalLine(o) {
   return typeof o.totalPrice === "number" ? won(o.totalPrice) : String(o.totalPrice ?? "");
 }
 
+/* --- 주문 상태를 손님이 읽는 말로 --- */
+
+// 단계 줄의 네 칸 - 저장된 status 값과, 화면에 보일 말
+const STEPS = [
+  { status: "paid", label: "결제 완료" },
+  { status: "preparing", label: "상품 준비 중" },
+  { status: "shipped", label: "배송 중" },
+  { status: "delivered", label: "배송 완료" }
+];
+// 단계 줄에 넣지 않는 값
+const CANCELED = { status: "canceled", label: "주문 취소" };
+// 위 다섯 값이 아닐 때 보일 말 - 저장된 영어 값은 화면에 내보내지 않습니다
+const UNKNOWN_LABEL = "확인 중";
+
+// 상태 칸 하나를 만듭니다. Firestore 의 status 값은 읽기만 하고 바꾸지 않습니다.
+function statusCell(status) {
+  const wrap = document.createElement("div");
+  wrap.className = "order-status";
+
+  const step = STEPS.findIndex(s => s.status === status);
+  const label = document.createElement("strong");
+  label.className = "status-label";
+  label.textContent =
+    step >= 0 ? STEPS[step].label :
+    status === CANCELED.status ? CANCELED.label :
+    UNKNOWN_LABEL;
+  wrap.append(label);
+
+  // 단계 줄은 네 값 중 하나일 때만 그립니다 (주문 취소 · 확인 중은 말만 보입니다)
+  if (step < 0) {
+    if (status === CANCELED.status) wrap.classList.add("is-canceled");
+    return wrap;
+  }
+
+  const line = document.createElement("ol");
+  line.className = "status-steps";
+  line.setAttribute("aria-label", "주문 단계");
+  STEPS.forEach((s, i) => {
+    const li = document.createElement("li");
+    li.textContent = s.label;
+    // 지나온 단계 · 지금 단계 · 아직 안 온 단계
+    if (i < step) li.className = "done";
+    if (i === step) {
+      li.className = "now";
+      li.setAttribute("aria-current", "step");
+    }
+    line.append(li);
+  });
+  wrap.append(line);
+  return wrap;
+}
+
 function sayLine(text) {
   const line = document.createElement("p");
   line.className = "empty";
@@ -84,10 +136,12 @@ function paintOrders(snap) {
 
   orders.forEach(o => {
     const row = table.insertRow();
-    // Firestore 에서 온 값은 글자로만 넣습니다. status 는 저장된 값 그대로입니다.
-    [dayLine(o), namesLine(o), totalLine(o), String(o.status ?? "")].forEach(text => {
+    // Firestore 에서 온 값은 글자로만 넣습니다
+    [dayLine(o), namesLine(o), totalLine(o)].forEach(text => {
       row.insertCell().textContent = text;
     });
+    // 상태는 저장된 영어 값 대신 손님이 읽는 말과 단계 줄로 보여 줍니다
+    row.insertCell().append(statusCell(o.status));
   });
 
   box.replaceChildren(table);
