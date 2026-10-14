@@ -60,6 +60,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
       <button class="btn ghost" type="button" id="mypage-logout">로그아웃</button>
     </div>
+
+    <!-- 내 주문 - assets/orders.js 가 Firestore 의 orders 를 실시간으로 들어 채웁니다 -->
+    <h2 id="orders-title">내 주문</h2>
+    <div id="order-list"><p class="empty">주문을 불러오는 중입니다.</p></div>
   </div>
 
 </div></main>
@@ -68,6 +72,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <script src="assets/shop.js"></script>
 <script src="assets/app.js"></script>
 <script type="module" src="assets/auth.js"></script>
+<script type="module" src="assets/orders.js"></script>
 
 <script type="module">
   // 로그인 상태를 묻는 자리는 assets/auth.js 한 곳뿐입니다. 여기서는 결과만 받아 씁니다.
