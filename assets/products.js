@@ -22,8 +22,11 @@ import {
   runTransaction,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getStorage, ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-storage.js";
 
 const db = getFirestore(getApp());
+// 상품 사진은 설정의 storageBucket 에 있습니다
+const storage = getStorage(getApp());
 
 // shop.js 에서 올릴 상품과, 재고 · 보이기 값
 const SEED = [
@@ -82,12 +85,32 @@ function cardHtml(d) {
   const local = findProduct(d.id);
   return `
     <a class="card" href="product.html?id=${encodeURIComponent(d.id)}">
-      <div class="thumb">${local ? local.emoji : ""}</div>
+      <div class="thumb"${p.imagePath ? ` data-image-path="${esc(p.imagePath)}"` : ""}>${local ? local.emoji : ""}</div>
       <h3>${esc(p.name)}</h3>
       <p class="sum">${esc(p.summary)}</p>
       <div class="price">${won(Number(p.price))}</div>
       <p class="stock">${stockLine(Number(p.stock))}</p>
     </a>`;
+}
+
+// imagePath 가 있는 카드는 그 경로로 다운로드 URL 을 받아 그림 글자 자리에 사진을 넣습니다.
+// 사진 주소를 받는 것은 Storage 에 묻는 일이라 「읽은 문서」 수에 더하지 않습니다.
+// 받지 못하면 그림 글자를 그대로 두고 오류만 콘솔에 남깁니다.
+function fillPhotos(box) {
+  box.querySelectorAll(".thumb[data-image-path]:not([data-photo])").forEach(async thumb => {
+    thumb.dataset.photo = "loading";
+    try {
+      const url = await getDownloadURL(ref(storage, thumb.dataset.imagePath));
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = thumb.parentElement.querySelector("h3")?.textContent || "";
+      thumb.replaceChildren(img);
+      thumb.dataset.photo = "done";
+    } catch (error) {
+      console.error(error);
+      thumb.dataset.photo = "failed";
+    }
+  });
 }
 
 // 셋보다 적게 왔으면 더 가져올 것이 없으므로 버튼을 숨깁니다
@@ -119,6 +142,7 @@ async function paintList() {
     }
 
     box.innerHTML = docs.map(cardHtml).join("");
+    fillPhotos(box);
     lastDoc = docs[docs.length - 1];
     setMoreButton(docs.length);
   } catch (error) {
@@ -148,6 +172,7 @@ function setupMore() {
 
       // 아래에 이어 붙입니다
       box.insertAdjacentHTML("beforeend", snap.docs.map(cardHtml).join(""));
+      fillPhotos(box);
       if (snap.size) lastDoc = snap.docs[snap.size - 1];
       setMoreButton(snap.size);
     } catch (error) {
