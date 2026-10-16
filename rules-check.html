@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>규칙 확인 — 유라문구</title>
+<meta name="description" content="보안 규칙이 무엇을 허용하는지 버튼을 눌러 확인하는 화면입니다">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="assets/style.css">
+
+<!-- 동의 배너 - 태그 관리자보다 먼저 읽혀야 합니다 -->
+<script src="assets/consent.js"></script>
+
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-M26J92PP');</script>
+<!-- End Google Tag Manager -->
+
+</head>
+<body>
+
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-M26J92PP"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+
+<main><div class="wrap">
+
+  <!-- 로그인했는지 확인이 끝날 때까지는 이 줄만 보입니다 -->
+  <p class="lead" id="checking">로그인했는지 확인하고 있습니다.</p>
+
+  <!-- 로그인하지 않은 사람에게는 이 한 줄만 보입니다 -->
+  <p class="lead" id="need-login" hidden>로그인해 주세요.</p>
+
+  <!-- 로그인한 사람일 때만 hidden 이 풀립니다 -->
+  <div id="body" hidden>
+    <h2>규칙 확인</h2>
+
+    <!-- 로그인한 이메일과 UID -->
+    <div class="panel">
+      <p class="panel-label">이메일</p>
+      <p class="panel-value" id="who-email"></p>
+      <p class="panel-label">UID</p>
+      <p class="panel-value" id="who-uid"></p>
+    </div>
+
+    <!-- 버튼 셋. 각 버튼 아래에 그 버튼의 결과를 보여 줍니다 -->
+    <div class="panel">
+      <button class="btn" type="button" id="btn-read">주문 전체 읽기</button>
+      <p class="rules-note" id="read-note" role="status" aria-live="polite"></p>
+      <div id="read-result"></div>
+    </div>
+
+    <div class="panel">
+      <button class="btn" type="button" id="btn-edit">내 주문 금액 고치기</button>
+      <div id="edit-result"></div>
+    </div>
+
+    <div class="panel">
+      <button class="btn" type="button" id="btn-zero">상품 가격 0원으로</button>
+      <div id="zero-result"></div>
+    </div>
+  </div>
+
+</div></main>
+
+<!-- 로그인 상태를 묻는 자리는 assets/auth.js 한 곳뿐입니다. 여기서는 결과만 받아 씁니다. -->
+<script type="module">
+  import { onUser } from "./assets/auth.js";
+  import { getApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    query,
+    where,
+    limit,
+    getDocs,
+    doc,
+    updateDoc
+  } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+  // Firebase 연결은 auth.js 가 이미 넣어 둔 값(12.19.0)으로 해 둡니다. 여기서는 그것을 받아 씁니다.
+  const db = getFirestore(getApp());
+
+  const checking = document.querySelector("#checking");
+  const needLogin = document.querySelector("#need-login");
+  const body = document.querySelector("#body");
+
+  // 지금 들어와 있는 사람의 UID - 버튼들이 씁니다
+  let uid = null;
+
+  // 오류 글은 줄이지 않고 그대로 보여 줍니다 (code 와 message 를 모두)
+  function showError(box, error) {
+    console.error(error);
+    const pre = document.createElement("pre");
+    pre.className = "rules-error";
+    const code = error && error.code ? error.code : "";
+    const message = error && error.message ? error.message : String(error);
+    pre.textContent = (code ? code + "\n" : "") + message;
+    box.replaceChildren(pre);
+  }
+
+  // 성공한 결과 한 줄을 글자로만 보여 줍니다
+  function showOk(box, text) {
+    const p = document.createElement("p");
+    p.className = "rules-ok";
+    p.textContent = text;
+    box.replaceChildren(p);
+  }
+
+  // 로그인 상태가 확인되면 한 번, 그 뒤 바뀔 때마다 다시 불립니다
+  onUser(user => {
+    checking.hidden = true;
+    if (!user) {
+      uid = null;
+      body.hidden = true;
+      needLogin.hidden = false;
+      return;
+    }
+    uid = user.uid;
+    needLogin.hidden = true;
+    body.hidden = false;
+    document.querySelector("#who-email").textContent = user.email || "(이메일이 없는 계정입니다)";
+    document.querySelector("#who-uid").textContent = user.uid;
+  });
+
+  /* --- 버튼 1. 주문 전체 읽기 ---
+     orders 를 조건 없이 한 번 읽어, 주문마다 문서 ID · userId · totalPrice 를 표로.
+     표 위에 전체 건수와, 그중 내 UID 와 다른 userId 가 몇 건인지 한 줄로. */
+  const readBtn = document.querySelector("#btn-read");
+  const readNote = document.querySelector("#read-note");
+  const readResult = document.querySelector("#read-result");
+  readBtn.addEventListener("click", async () => {
+    readBtn.disabled = true;
+    readNote.textContent = "";
+    readResult.replaceChildren();
+    try {
+      const snap = await getDocs(collection(db, "orders"));
+
+      let others = 0;
+      const table = document.createElement("table");
+      table.className = "cart";
+      const head = table.insertRow();
+      ["문서 ID", "userId", "totalPrice"].forEach(text => {
+        const th = document.createElement("th");
+        th.textContent = text;
+        head.append(th);
+      });
+
+      snap.forEach(d => {
+        const data = d.data();
+        const docUserId = data.userId;
+        if (docUserId !== uid) others += 1;
+        const row = table.insertRow();
+        // Firestore 에서 온 값은 글자로만 넣습니다
+        [d.id, String(docUserId ?? ""), String(data.totalPrice ?? "")].forEach(text => {
+          row.insertCell().textContent = text;
+        });
+      });
+
+      readNote.textContent =
+        "전체 " + snap.size + "건, 그중 내 UID 와 다른 것 " + others + "건";
+      readResult.replaceChildren(table);
+    } catch (error) {
+      showError(readResult, error);
+    }
+    readBtn.disabled = false;
+  });
+
+  /* --- 버튼 2. 내 주문 금액 고치기 ---
+     userId 가 내 UID 와 같은 주문 하나를 찾아, 그 문서의 totalPrice 만 1 로. */
+  const editBtn = document.querySelector("#btn-edit");
+  const editResult = document.querySelector("#edit-result");
+  editBtn.addEventListener("click", async () => {
+    editBtn.disabled = true;
+    editResult.replaceChildren();
+    try {
+      const mine = query(collection(db, "orders"), where("userId", "==", uid), limit(1));
+      const snap = await getDocs(mine);
+      if (snap.empty) {
+        showOk(editResult, "내 UID 와 같은 주문을 찾지 못했습니다.");
+      } else {
+        const target = snap.docs[0];
+        await updateDoc(doc(db, "orders", target.id), { totalPrice: 1 });
+        showOk(editResult, "바꾼 문서 ID: " + target.id + " (totalPrice 를 1 로)");
+      }
+    } catch (error) {
+      showError(editResult, error);
+    }
+    editBtn.disabled = false;
+  });
+
+  /* --- 버튼 3. 상품 가격 0원으로 ---
+     products 의 p1 문서의 price 만 0 으로. */
+  const zeroBtn = document.querySelector("#btn-zero");
+  const zeroResult = document.querySelector("#zero-result");
+  zeroBtn.addEventListener("click", async () => {
+    zeroBtn.disabled = true;
+    zeroResult.replaceChildren();
+    try {
+      await updateDoc(doc(db, "products", "p1"), { price: 0 });
+      showOk(zeroResult, "바꾼 문서 ID: p1 (price 를 0 으로)");
+    } catch (error) {
+      showError(zeroResult, error);
+    }
+    zeroBtn.disabled = false;
+  });
+</script>
+</body>
+</html>
