@@ -208,7 +208,7 @@ function paintCheckout() {
   const sum = document.querySelector("#pay-total");
   if (sum) sum.textContent = won(Cart.total());
 
-  form.addEventListener("submit", e => {
+  form.addEventListener("submit", async e => {
     e.preventDefault();
 
     // ▼ 여기에 「결제를 마쳤다」를 알리는 코드가 들어갑니다 (뒤 수업에서)
@@ -243,8 +243,36 @@ function paintCheckout() {
       }
     });
 
-    Cart.clear();
-    location.href = "done.html";
+    // 포트원 결제창(테스트)을 연다 - 주문 문서·장바구니 비우기·완료 화면은 아직 하지 않는다
+    const result = document.querySelector("#pay-result");
+    if (!purchaseItems.length) {
+      result.textContent = "장바구니가 비어 있습니다";
+      return;
+    }
+    // 결제 번호 - 주문 번호와 같은 방식: 누른 순간의 시각(밀리초) + 무작위 글자 8자
+    const paymentId = "HARU-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+    // 주문 이름 - 첫 상품 이름, 종류가 더 있으면 「외 N건」
+    const rest = purchaseItems.length - 1;
+    const orderName = purchaseItems[0].item_name + (rest > 0 ? " 외 " + rest + "건" : "");
+
+    let received;
+    try {
+      const response = await PortOne.requestPayment({
+        storeId: "store-411f2e1f-34d8-4cd5-9085-69cc747bc4d3",
+        channelKey: "channel-key-c04dbec2-dfa0-4a78-a057-15ebfd6faabd",
+        paymentId: paymentId,
+        orderName: orderName,
+        totalAmount: purchaseTotal,
+        currency: "KRW",
+        payMethod: "CARD"
+      });
+      // 결제창이 돌려준 결과를 받은 그대로 글자로 바꾼다
+      received = JSON.stringify(response);
+    } catch (err) {
+      // 결제창을 열다 오류가 나면 그 오류 글자를 그대로 쓴다
+      received = String(err);
+    }
+    result.textContent = "paymentId: " + paymentId + "\n" + received;
   });
 }
 
