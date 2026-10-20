@@ -211,39 +211,16 @@ function paintCheckout() {
   form.addEventListener("submit", async e => {
     e.preventDefault();
 
-    // ▼ 여기에 「결제를 마쳤다」를 알리는 코드가 들어갑니다 (뒤 수업에서)
-    // 주문 번호 - 누른 순간의 시각(밀리초) + 무작위 글자 8자
-    const transactionId = "ORD-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
-    // 장바구니를 비우기 전에, 주문한 상품마다 상품 목록에서 이름과 가격을 찾아 상자로 만든다
+    // purchase 는 여기서 보내지 않는다 - 결제 결과를 받는 주문 완료 화면(done.js)에서 보낸다
+    // 장바구니에 담긴 상품마다 상품 목록에서 이름과 가격을 찾아 상자로 만든다
     const purchaseItems = Cart.read().map(i => {
       const p = findProduct(i.id);
       return p ? { item_id: p.id, item_name: p.name, price: p.price, quantity: i.qty } : null;
     }).filter(Boolean);
-    // 주문한 상품 합계 - 가격 × 수량의 합, 배송비 없음
+    // 장바구니 합계 - 가격 × 수량의 합, 배송비 없음
     const purchaseTotal = Cart.total();
 
-    // 통로가 이미 있으면 그대로 쓰고, 없을 때만 새로 만든다
-    window.dataLayer = window.dataLayer || [];
-    // 앞에서 넣은 상품 값이 섞이지 않게 먼저 비운다
-    dataLayer.push({ ecommerce: null });
-    // 통로 끝에 한 덩어리를 넣는다 - 넣는 순간이 태그 관리자가 듣는 순간
-    dataLayer.push({
-      // 무슨 일이 일어났나 - 계획서 이름 글자 그대로
-      event: "purchase",
-      // 같이 보내는 상품 값 묶음
-      ecommerce: {
-        // 주문 번호
-        transaction_id: transactionId,
-        // 어느 나라 돈인가
-        currency: "KRW",
-        // 금액 - 주문한 상품 합계
-        value: purchaseTotal,
-        // 주문한 상품 상자 전체
-        items: purchaseItems
-      }
-    });
-
-    // 포트원 결제창(테스트)을 연다 - 주문 문서·장바구니 비우기·완료 화면은 아직 하지 않는다
+    // 포트원 결제창(테스트)을 연다 - 결과는 주문 완료 화면 한 곳에서 받는다
     const result = document.querySelector("#pay-result");
     if (!purchaseItems.length) {
       result.textContent = "장바구니가 비어 있습니다";
@@ -255,24 +232,37 @@ function paintCheckout() {
     const rest = purchaseItems.length - 1;
     const orderName = purchaseItems[0].item_name + (rest > 0 ? " 외 " + rest + "건" : "");
 
-    let received;
+    // 주문 완료 화면 주소 - 지금 화면 주소를 기준으로 만들어서, 배포된 곳에서는 https:// 로 시작한다
+    const doneUrl = new URL("done.html", location.href).href;
+
+    let response;
     try {
-      const response = await PortOne.requestPayment({
+      response = await PortOne.requestPayment({
         storeId: "store-411f2e1f-34d8-4cd5-9085-69cc747bc4d3",
         channelKey: "channel-key-c04dbec2-dfa0-4a78-a057-15ebfd6faabd",
         paymentId: paymentId,
         orderName: orderName,
         totalAmount: purchaseTotal,
         currency: "KRW",
-        payMethod: "CARD"
+        payMethod: "CARD",
+        // 장바구니에 든 상품 ID와 수량 그대로 - 금액은 싣지 않는다
+        customData: { items: Cart.read().map(i => ({ id: i.id, qty: i.qty })) },
+        // 휴대폰에서는 결제가 끝나면 이 주소로 넘어온다 (뒤에 paymentId · code · message 가 붙는다)
+        redirectUrl: doneUrl
       });
-      // 결제창이 돌려준 결과를 받은 그대로 글자로 바꾼다
-      received = JSON.stringify(response);
     } catch (err) {
-      // 결제창을 열다 오류가 나면 그 오류 글자를 그대로 쓴다
-      received = String(err);
+      // 결제창을 열지도 못하고 오류가 나면 이 화면에 그 오류 글자를 그대로 쓴다
+      result.textContent = "paymentId: " + paymentId + "\n" + String(err);
+      return;
     }
-    result.textContent = "paymentId: " + paymentId + "\n" + received;
+    // 휴대폰에서 주소를 옮겨 가는 중이면 돌려받는 값이 없다
+    if (!response) return;
+
+    // PC 에서 받은 결과를 휴대폰과 같은 모양으로 주문 완료 화면 주소 뒤에 붙여 넘긴다
+    const params = new URLSearchParams({ paymentId: response.paymentId ?? paymentId });
+    if (response.code != null) params.set("code", response.code);
+    if (response.message != null) params.set("message", response.message);
+    location.href = doneUrl + "?" + params.toString();
   });
 }
 
