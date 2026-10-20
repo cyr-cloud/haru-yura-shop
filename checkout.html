@@ -18,6 +18,9 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 })(window,document,'script','dataLayer','GTM-M26J92PP');</script>
 <!-- End Google Tag Manager -->
 
+<!-- 포트원 V2 브라우저 SDK -->
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+
 </head>
 <body>
 
@@ -55,5 +58,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <script src="assets/shop.js"></script>
 <script src="assets/app.js"></script>
 <script type="module" src="assets/auth.js"></script>
+<script>
+  // 포트원 SDK를 불러왔는지 콘솔에 한 줄 남긴다 - 불러왔으면 PortOne이 생긴다
+  console.log(window.PortOne ? "포트원 SDK 준비됨" : "포트원 SDK 없음");
+</script>
 </body>
 </html>
