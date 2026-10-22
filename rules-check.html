@@ -63,6 +63,17 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <button class="btn" type="button" id="btn-zero">상품 가격 0원으로</button>
       <div id="zero-result"></div>
     </div>
+
+    <!-- 버튼 둘. 금액을 서버 함수 calcOrderTotal 에게 묻습니다 -->
+    <div class="panel">
+      <button class="btn" type="button" id="btn-total">서버에게 금액 묻기</button>
+      <div id="total-result"></div>
+    </div>
+
+    <div class="panel">
+      <button class="btn" type="button" id="btn-total-price">가격 바꿔 보내기</button>
+      <div id="total-price-result"></div>
+    </div>
   </div>
 
 </div></main>
@@ -81,6 +92,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     doc,
     updateDoc
   } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
 
   // Firebase 연결은 auth.js 가 이미 넣어 둔 값(12.19.0)으로 해 둡니다. 여기서는 그것을 받아 씁니다.
   const db = getFirestore(getApp());
@@ -208,6 +220,30 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     }
     zeroBtn.disabled = false;
   });
+
+  /* --- 버튼 4 · 5. 서버에게 금액 묻기 / 가격 바꿔 보내기 ---
+     함수 지역은 us-central1 로 맞춥니다. 로그인 정보는 SDK 가 저절로 실어 보냅니다. */
+  const calcOrderTotal = httpsCallable(getFunctions(getApp(), "us-central1"), "calcOrderTotal");
+
+  function setupTotalButton(btnId, resultId, payload) {
+    const btn = document.querySelector(btnId);
+    const box = document.querySelector(resultId);
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      box.replaceChildren();
+      try {
+        const result = await calcOrderTotal(payload);
+        showOk(box, "허용 · totalPrice: " + result.data.totalPrice);
+      } catch (error) {
+        showError(box, error);
+      }
+      btn.disabled = false;
+    });
+  }
+
+  setupTotalButton("#btn-total", "#total-result", { productId: "p1", quantity: 2 });
+  // 같은 요청에 price: 100 을 덧붙여 보냅니다 - 함수는 이 값을 쓰지 않아야 합니다
+  setupTotalButton("#btn-total-price", "#total-price-result", { productId: "p1", quantity: 2, price: 100 });
 </script>
 </body>
 </html>
