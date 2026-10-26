@@ -32,6 +32,15 @@ export const auth = getAuth(app);
 // 이 값을 정해 두면 Firebase 가 한국어 본문으로 보냅니다.
 auth.languageCode = "ko";
 
+/* --- 1-1. 알림을 받을 서비스 워커 등록 --- */
+// 맨 위 폴더의 firebase-messaging-sw.js 를 이 가게의 서비스 워커로 브라우저에 연결만 해 둡니다.
+// 알림 허락을 묻거나 알림 받을 주소(토큰)를 받는 일은 아직 하지 않습니다.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/firebase-messaging-sw.js").catch(() => {
+    /* 등록이 안 되는 브라우저면 그냥 넘어갑니다 - 다른 화면 동작에는 영향이 없습니다 */
+  });
+}
+
 /* --- 2. 로그인했는지 묻는 자리 - 가게 전체에서 여기 한 곳뿐입니다 --- */
 
 // 지금 들어와 있는 사람 (아직 모를 때는 null)
