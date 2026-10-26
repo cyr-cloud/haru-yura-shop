@@ -7,6 +7,7 @@
 
 // Firebase 연결은 auth.js 가 이미 넣어 둔 값으로 해 둡니다. 여기서는 그것을 받아 씁니다.
 import { auth, onUser } from "./auth.js";
+import { showPushAsk } from "./push-ask.js";
 import { getApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import {
   getFirestore,
@@ -270,6 +271,8 @@ function setupOrder() {
 
       msg.textContent = "주문했습니다: " + result.name + " 1개 · " + won(Number(result.price)) + " (주문 번호 " + orderRef.id + ")";
       document.querySelector("#detail-stock").textContent = stockLine(result.stockLeft);
+      // 「주문했습니다」 바로 아래에 알림을 받을지 묻는 카드를 붙입니다
+      showPushAsk(msg, orderRef.id);
     } catch (error) {
       // 재고가 모자라면 아무것도 쓰지 않고 멈췄습니다
       msg.textContent = error instanceof OutOfStock ? "재고가 없습니다" : errorLine(error);

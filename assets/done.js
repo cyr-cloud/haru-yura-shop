@@ -7,6 +7,7 @@
 
 // Firebase 연결은 auth.js 가 이미 넣어 둔 값으로 해 둡니다. 여기서는 그것을 받아 씁니다.
 import { auth } from "./auth.js";
+import { showPushAsk } from "./push-ask.js";
 import { getApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import {
   getFirestore,
@@ -100,6 +101,8 @@ async function receivePayment() {
   if (badge) badge.textContent = Cart.count();
 
   show("결제 ID: " + paymentId, "주문이 접수되었습니다");
+  // 주문 결과 바로 아래에 알림을 받을지 묻는 카드를 붙입니다
+  showPushAsk(document.querySelector("#done-result"), paymentId);
 }
 
 receivePayment();
