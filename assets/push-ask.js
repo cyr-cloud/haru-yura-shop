@@ -8,6 +8,8 @@
    빌드 도구 없이 <script type="module"> 로 그대로 돌아갑니다.
    =========================================================== */
 
+import { savePushToken } from "./push-token.js";
+
 // 「나중에」를 누른 주문 번호를 적어 두는 이름 - 이번 주문에서만 카드를 숨깁니다
 const LATER_KEY = "haru_push_later_";
 
@@ -74,6 +76,8 @@ export function showPushAsk(anchor, orderId) {
     // 단추를 누른 이 처리 안에서만 브라우저의 알림 허락 창을 띄웁니다
     const result = await Notification.requestPermission();
     console.log("알림 허락 결과: " + result);
+    // granted 가 된 바로 그 자리에서 알림 받는 주소를 받아 적습니다
+    if (result === "granted") savePushToken(true);
 
     // 결과에 맞는 한 줄로 바꿉니다 - 창을 그냥 닫았으면(default) 카드를 그대로 둡니다
     const line = stateNote(result);
