@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>관리 화면 — 유라문구</title>
+<meta name="description" content="가게를 관리하는 사람만 들어오는 화면의 입구입니다">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="assets/style.css">
+
+<!-- 동의 배너 - 태그 관리자보다 먼저 읽혀야 합니다 -->
+<script src="assets/consent.js"></script>
+
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-M26J92PP');</script>
+<!-- End Google Tag Manager -->
+
+</head>
+<body>
+
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-M26J92PP"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+
+<!-- 가게 머리글 · 메뉴는 넣지 않습니다. 주소를 직접 넣어서 여는 화면입니다. -->
+<main><div class="wrap">
+  <h2>관리 화면</h2>
+
+  <!-- 로그인했는지 확인이 끝날 때까지는 이 줄만 보입니다 -->
+  <p class="lead" id="checking">로그인했는지 확인하고 있습니다.</p>
+
+  <!-- 로그인하지 않은 사람에게는 이 한 줄과 링크만 보입니다 -->
+  <div id="need-login" hidden>
+    <p class="lead">로그인이 필요합니다</p>
+    <a href="/login.html">로그인 화면으로</a>
+  </div>
+
+  <!-- 토큰의 role 이 staff 또는 admin 일 때 -->
+  <p class="lead" id="is-admin" hidden></p>
+
+  <!-- 그 밖일 때 -->
+  <div id="no-role" hidden>
+    <p class="lead">권한이 없습니다</p>
+    <button class="btn" type="button" id="btn-grant">주인 명찰 받기</button>
+  </div>
+
+  <!-- 결과나 오류를 보여 주는 자리 -->
+  <p id="admin-msg" role="status" aria-live="polite"></p>
+  <div id="admin-error"></div>
+
+  <button class="btn ghost" type="button" id="btn-recheck">다시 확인</button>
+</div></main>
+
+<!-- 로그인 상태를 묻는 자리는 assets/auth.js 한 곳뿐입니다. 여기서는 결과만 받아 씁니다. -->
+<script type="module">
+  import { auth, onUser } from "./assets/auth.js";
+  import { getApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-functions.js";
+
+  // Firebase 연결은 auth.js 가 이미 넣어 둔 값(12.19.0)으로 해 둡니다. 여기서는 그것을 받아 씁니다.
+  // 함수 지역은 us-central1 로 맞춥니다. 로그인 정보는 SDK 가 저절로 실어 보냅니다.
+  const grantOwnerRole = httpsCallable(getFunctions(getApp(), "us-central1"), "grantOwnerRole");
+
+  const checking = document.querySelector("#checking");
+  const needLogin = document.querySelector("#need-login");
+  const isAdmin = document.querySelector("#is-admin");
+  const noRole = document.querySelector("#no-role");
+  const msg = document.querySelector("#admin-msg");
+  const errorBox = document.querySelector("#admin-error");
+  const grantBtn = document.querySelector("#btn-grant");
+  const recheckBtn = document.querySelector("#btn-recheck");
+
+  // 판단을 여러 번 불렀을 때 마지막 것만 화면에 그리기 위한 번호
+  let turn = 0;
+
+  // 오류 글은 줄이지 않고 그대로 보여 줍니다 (code 와 message 를 모두)
+  function showError(error) {
+    console.error(error);
+    const pre = document.createElement("pre");
+    pre.className = "rules-error";
+    const code = error && error.code ? error.code : "";
+    const message = error && error.message ? error.message : String(error);
+    pre.textContent = (code ? code + "\n" : "") + message;
+    errorBox.replaceChildren(pre);
+  }
+
+  function hideAll() {
+    checking.hidden = true;
+    needLogin.hidden = true;
+    isAdmin.hidden = true;
+    noRole.hidden = true;
+  }
+
+  /**
+   * 로그인 토큰의 커스텀 클레임 role 로만 판단합니다 (Firestore users 문서는 보지 않습니다).
+   * refresh 가 true 면 토큰을 서버에서 새로 받아 옵니다 - 다시 로그인하지 않아도 됩니다.
+   */
+  async function judge(user, refresh) {
+    const mine = ++turn;
+    if (!user) {
+      hideAll();
+      needLogin.hidden = false;
+      return;
+    }
+    const result = await user.getIdTokenResult(refresh);
+    if (mine !== turn) return;
+    const role = result.claims.role;
+    hideAll();
+    if (role === "staff" || role === "admin") {
+      isAdmin.textContent = "관리자: " + role;
+      isAdmin.hidden = false;
+    } else {
+      noRole.hidden = false;
+    }
+  }
+
+  // 로그인 상태가 확인되면 한 번, 그 뒤 바뀔 때마다 다시 불립니다
+  onUser(user => {
+    judge(user, false).catch(showError);
+  });
+
+  // 주인 명찰 받기 - 성공하면 토큰을 새로 받아 다시 판단합니다
+  grantBtn.addEventListener("click", async () => {
+    grantBtn.disabled = true;
+    msg.textContent = "명찰을 받는 중입니다";
+    errorBox.replaceChildren();
+    try {
+      await grantOwnerRole();
+      msg.textContent = "명찰을 받았습니다. 토큰을 새로 받는 중입니다";
+      await judge(auth.currentUser, true);
+      msg.textContent = "";
+    } catch (error) {
+      msg.textContent = "";
+      showError(error);
+    }
+    grantBtn.disabled = false;
+  });
+
+  // 다시 확인 - 토큰을 새로 받아 다시 판단합니다
+  recheckBtn.addEventListener("click", async () => {
+    recheckBtn.disabled = true;
+    msg.textContent = "";
+    errorBox.replaceChildren();
+    try {
+      await judge(auth.currentUser, true);
+    } catch (error) {
+      showError(error);
+    }
+    recheckBtn.disabled = false;
+  });
+</script>
+</body>
+</html>
