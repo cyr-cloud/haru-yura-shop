@@ -6,7 +6,7 @@
    =========================================================== */
 
 // Firebase 연결은 auth.js 가 이미 넣어 둔 값으로 해 둡니다. 여기서는 그것을 받아 씁니다.
-import { auth, onUser } from "./auth.js";
+import { auth } from "./auth.js";
 import { showPushAsk } from "./push-ask.js";
 import { getApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import {
@@ -28,15 +28,6 @@ import { getStorage, ref, getDownloadURL } from "https://www.gstatic.com/firebas
 const db = getFirestore(getApp());
 // 상품 사진은 설정의 storageBucket 에 있습니다
 const storage = getStorage(getApp());
-
-// shop.js 에서 올릴 상품과, 재고 · 보이기 값
-const SEED = [
-  { id: "p2", stock: 30, isVisible: true },
-  { id: "p3", stock: 8, isVisible: true },
-  { id: "p4", stock: 0, isVisible: true },
-  { id: "p5", stock: 5, isVisible: false },
-  { id: "p6", stock: 40, isVisible: true }
-];
 
 // Firestore 에서 온 글자는 HTML 로 넣기 전에 글자로 바꿔 둡니다
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
@@ -281,53 +272,9 @@ function setupOrder() {
   });
 }
 
-/* --- 상품 올리기 (로그인한 사람만) --- */
-function setupSeed() {
-  const btn = document.querySelector("#btn-seed");
-  const msg = document.querySelector("#seed-msg");
-  if (!btn) return;
-
-  // 로그인했을 때만 단추를 보여 줍니다
-  onUser(user => { btn.hidden = !user; });
-
-  btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    msg.textContent = "올리는 중입니다";
-    try {
-      // 다섯 장을 한 번에 올립니다 - 다 올라가거나 하나도 안 올라갑니다.
-      // 이미 있는 문서를 덮어쓰지 않도록, 하나라도 있으면 아무것도 쓰지 않고 멈춥니다.
-      const made = await runTransaction(db, async tx => {
-        const refs = SEED.map(s => doc(db, "products", s.id));
-        const snaps = await Promise.all(refs.map(r => tx.get(r)));
-        const already = snaps.filter(s => s.exists()).map(s => s.id);
-        if (already.length) throw new Error("이미 있는 문서가 있어 하나도 올리지 않았습니다: " + already.join(", "));
-
-        SEED.forEach((s, i) => {
-          const p = findProduct(s.id);
-          tx.set(refs[i], {
-            name: p.name,
-            price: p.price,
-            summary: p.summary,
-            stock: s.stock,
-            isVisible: s.isVisible,
-            createdAt: serverTimestamp()
-          });
-        });
-        return SEED.map(s => s.id);
-      });
-      msg.textContent = made.join(", ") + " 다섯 장을 products 에 올렸습니다.";
-      await paintList();
-    } catch (error) {
-      msg.textContent = errorLine(error);
-    }
-    btn.disabled = false;
-  });
-}
-
 domReady.then(() => {
   paintList();
   setupMore();
   paintDetail();
   setupOrder();
-  setupSeed();
 });
