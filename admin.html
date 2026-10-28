@@ -78,6 +78,22 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     </form>
     <div id="new-result"></div>
 
+    <!-- 필터 · 검색 · 정렬 - 한 번 읽어 둔 상품에서 화면이 고릅니다 (Firestore 에 다시 묻지 않습니다) -->
+    <div id="products-tools">
+      <div role="group" aria-label="필터">
+        <button class="btn" type="button" data-filter="all" aria-pressed="true">전체</button>
+        <button class="btn ghost" type="button" data-filter="soldout" aria-pressed="false">품절만</button>
+        <button class="btn ghost" type="button" data-filter="hidden" aria-pressed="false">숨김만</button>
+      </div>
+      <label for="products-search">이름 검색</label>
+      <input id="products-search" type="search" placeholder="이름에 든 글자">
+      <label for="products-sort">정렬</label>
+      <select id="products-sort">
+        <option value="stock">재고 적은 순</option>
+        <option value="name">이름순</option>
+      </select>
+    </div>
+
     <p id="products-msg" role="status" aria-live="polite"></p>
     <div id="products-table"></div>
   </section>
@@ -274,26 +290,80 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   }
 
   // products 를 조건 없이 전부 읽어 표로 그립니다 (숨긴 상품도 모두)
+  // 한 번 읽어 둔 상품 전부 - { id, data } 의 목록. 필터 · 검색 · 정렬은 여기서 고릅니다
+  let allProducts = [];
+
+  // 지금 고른 필터 · 검색 · 정렬
+  const view = { filter: "all", search: "", sort: "stock" };
+
+  // products 를 조건 없이 한 번 읽어 둡니다 (골라 읽기 · 정렬해 읽기 · 개수 제한 없음)
   async function paintTable() {
     productsMsg.textContent = "상품을 읽는 중입니다";
     try {
       const snap = await getDocsFromServer(productsCol);
-      const table = document.createElement("table");
-      table.className = "cart";
-      const head = table.insertRow();
-      ["문서 ID", "사진", "name", "price", "stock", "품절", "노출", "", "결과"].forEach(text => {
-        const th = document.createElement("th");
-        th.textContent = text;
-        head.append(th);
-      });
-      snap.forEach(d => addRow(table, d.id, d.data()));
-      productsMsg.textContent = "전체 " + snap.size + "건";
-      tableBox.replaceChildren(table);
+      allProducts = snap.docs.map(d => ({ id: d.id, data: d.data() }));
+      renderTable();
     } catch (error) {
       productsMsg.textContent = "";
       showError(error, tableBox);
     }
   }
+
+  // 읽어 둔 것에서 필터 · 검색 · 정렬을 겹쳐 적용해 표를 다시 그립니다 - Firestore 에 묻지 않습니다
+  function renderTable() {
+    const word = view.search.trim().toLowerCase();
+    const shown = allProducts.filter(({ data }) => {
+      if (view.filter === "soldout" && data.stock !== 0) return false;
+      if (view.filter === "hidden" && data.isVisible !== false) return false;
+      // 영어는 대소문자를 가리지 않습니다
+      if (word && !String(data.name ?? "").toLowerCase().includes(word)) return false;
+      return true;
+    });
+
+    if (view.sort === "stock") {
+      // 재고 적은 순 - 재고가 숫자가 아닌 상품은 맨 뒤로
+      const stockOf = d => (typeof d.stock === "number" ? d.stock : Infinity);
+      shown.sort((a, b) => stockOf(a.data) - stockOf(b.data));
+    } else {
+      shown.sort((a, b) => String(a.data.name ?? "").localeCompare(String(b.data.name ?? ""), "ko"));
+    }
+
+    const table = document.createElement("table");
+    table.className = "cart";
+    const head = table.insertRow();
+    ["문서 ID", "사진", "name", "price", "stock", "품절", "노출", "", "결과"].forEach(text => {
+      const th = document.createElement("th");
+      th.textContent = text;
+      head.append(th);
+    });
+    shown.forEach(({ id, data }) => addRow(table, id, data));
+    productsMsg.textContent = "지금 보이는 상품 " + shown.length + "개 / 전체 " + allProducts.length + "개";
+    tableBox.replaceChildren(table);
+  }
+
+  // 필터 버튼 셋 - 누른 것만 켜 둡니다
+  const filterBtns = document.querySelectorAll("#products-tools [data-filter]");
+  filterBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      view.filter = btn.dataset.filter;
+      filterBtns.forEach(b => {
+        const on = b === btn;
+        b.setAttribute("aria-pressed", String(on));
+        b.className = on ? "btn" : "btn ghost";
+      });
+      renderTable();
+    });
+  });
+
+  document.querySelector("#products-search").addEventListener("input", event => {
+    view.search = event.target.value;
+    renderTable();
+  });
+
+  document.querySelector("#products-sort").addEventListener("change", event => {
+    view.sort = event.target.value;
+    renderTable();
+  });
 
   // 상품 한 줄. Firestore 에서 온 값은 글자로만 넣습니다
   function addRow(table, id, data) {
