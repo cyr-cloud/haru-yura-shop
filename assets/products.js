@@ -202,6 +202,34 @@ async function paintDetail() {
     document.querySelector("#detail-price").textContent = won(Number(p.price));
     document.querySelector("#detail-stock").textContent = stockLine(Number(p.stock));
 
+    // imagePath 가 있으면 그림 자리에 사진을 넣습니다 (목록 카드와 같은 방식)
+    const thumb = box.querySelector(".thumb");
+    if (thumb && p.imagePath) {
+      thumb.dataset.imagePath = p.imagePath;
+      fillPhotos(box);
+    }
+
+    // 측정 이벤트 view_item - 상품이 제대로 보일 때, Firestore 에서 읽은 값으로 보냅니다
+    const price = Number(p.price);
+    // 통로가 이미 있으면 그대로 쓰고, 없을 때만 새로 만든다
+    window.dataLayer = window.dataLayer || [];
+    // 앞에서 넣은 상품 값이 섞이지 않게 먼저 비운다
+    dataLayer.push({ ecommerce: null });
+    // 통로 끝에 한 덩어리를 넣는다 - 넣는 순간이 태그 관리자가 듣는 순간
+    dataLayer.push({
+      // 무슨 일이 일어났나 - 계획서 이름 글자 그대로
+      event: "view_item",
+      // 같이 보내는 상품 값 묶음
+      ecommerce: {
+        // 어느 나라 돈인가
+        currency: "KRW",
+        // 금액 - 지금 보고 있는 상품 하나의 가격
+        value: price,
+        // 보고 있는 상품 상자 하나를 목록에 넣는다
+        items: [{ item_id: snap.id, item_name: p.name, price: price, quantity: 1 }]
+      }
+    });
+
     // 상품이 제대로 보일 때만 「바로 주문」 단추를 꺼냅니다
     const orderBtn = document.querySelector("#btn-order");
     if (orderBtn) orderBtn.hidden = false;

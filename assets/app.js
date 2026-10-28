@@ -95,42 +95,29 @@ function paintDetail() {
   const box = document.querySelector("#product-detail");
   if (!box) return;
 
-  const p = findProduct(qs("id"));
-  if (!p) { box.innerHTML = '<p class="empty">찾으시는 문구가 없습니다.</p>'; return; }
+  // 주소에 ?id= 가 없으면 볼 상품이 없습니다
+  const id = qs("id");
+  if (!id) { box.innerHTML = '<p class="empty">찾으시는 문구가 없습니다.</p>'; return; }
 
-  document.title = p.name + " — " + SHOP.name;
-  // 이름 · 가격 · 한 줄 소개 · 재고는 Firestore 에서 읽어 assets/products.js 가 채웁니다.
-  // 그림(emoji)과 긴 설명(detail)은 지금처럼 shop.js 에서 읽습니다.
+  // shop.js 에 있는 상품(p1~p6)이면 그림(emoji)과 긴 설명(detail)을 함께 그립니다.
+  // 관리 화면에서 만든 상품은 shop.js 에 없으므로 그 둘은 빼고 그립니다.
+  const p = findProduct(id);
+  if (p) document.title = p.name + " — " + SHOP.name;
+  // 이름 · 가격 · 한 줄 소개 · 재고 · 사진은 Firestore 에서 읽어 assets/products.js 가 채웁니다.
+  // 측정 이벤트 view_item 도 Firestore 에서 읽은 값으로 products.js 가 보냅니다.
+  // 장바구니는 shop.js 의 상품만 담을 수 있어서, shop.js 에 있는 상품에만 단추를 둡니다.
   box.innerHTML = `
-    <div class="thumb">${p.emoji}</div>
+    <div class="thumb">${p ? p.emoji : ""}</div>
     <div>
       <h1 id="detail-name">불러오는 중입니다</h1>
       <p class="sum" id="detail-summary"></p>
       <div class="price" id="detail-price"></div>
       <p class="stock" id="detail-stock"></p>
-      <div class="body prose">${p.detail.map(t => `<p>${t}</p>`).join("")}</div>
-      <button class="btn" id="add-to-cart">장바구니에 담아 두기</button>
+      ${p ? `<div class="body prose">${p.detail.map(t => `<p>${t}</p>`).join("")}</div>
+      <button class="btn" id="add-to-cart">장바구니에 담아 두기</button>` : ""}
     </div>`;
 
-  // 통로가 이미 있으면 그대로 쓰고, 없을 때만 새로 만든다
-  window.dataLayer = window.dataLayer || [];
-  // 앞에서 넣은 상품 값이 섞이지 않게 먼저 비운다
-  dataLayer.push({ ecommerce: null });
-  // 통로 끝에 한 덩어리를 넣는다 - 넣는 순간이 태그 관리자가 듣는 순간
-  dataLayer.push({
-    // 무슨 일이 일어났나 - 계획서 이름 글자 그대로
-    event: "view_item",
-    // 같이 보내는 상품 값 묶음
-    ecommerce: {
-      // 어느 나라 돈인가
-      currency: "KRW",
-      // 금액 - 지금 보고 있는 상품 하나의 가격
-      value: p.price,
-      // 보고 있는 상품 상자 하나를 목록에 넣는다
-      items: [{ item_id: p.id, item_name: p.name, price: p.price, quantity: 1 }]
-    }
-  });
-
+  if (!p) return;
   document.querySelector("#add-to-cart").addEventListener("click", () => {
     Cart.add(p.id);
     location.href = "cart.html";
