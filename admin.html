@@ -14,6 +14,15 @@
   #products-tools [role=group]{display:flex;gap:8px}
   #products-tools .btn{padding:9px 16px;font-size:13px;border:1px solid var(--accent)}
   #products-tools .btn.ghost{border-color:var(--line)}
+  /* 내리기 뒤에 화면 아래에 뜨는 한 줄 안내 */
+  #undo-bar{position:fixed;left:16px;right:16px;bottom:16px;z-index:10;display:flex;flex-wrap:wrap;
+    align-items:center;gap:8px 16px;padding:12px 16px;background:var(--card);border:1px solid var(--line);
+    box-shadow:0 4px 16px rgba(0,0,0,.12)}
+  #undo-bar[hidden]{display:none}
+  #undo-bar p{margin:0}
+  #undo-bar pre{margin:0;flex-basis:100%;white-space:pre-wrap}
+  #remove-dialog .btn{margin:0 8px 0 0}
+  #activity{margin:48px 0 96px}
 </style>
 
 <!-- 동의 배너 - 태그 관리자보다 먼저 읽혀야 합니다 -->
@@ -92,6 +101,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <button class="btn" type="button" data-filter="all" aria-pressed="true">전체</button>
         <button class="btn ghost" type="button" data-filter="soldout" aria-pressed="false">품절만</button>
         <button class="btn ghost" type="button" data-filter="hidden" aria-pressed="false">숨김만</button>
+        <button class="btn ghost" type="button" data-filter="deleted" aria-pressed="false">내린 상품</button>
       </div>
       <label for="products-search">이름 검색</label>
       <input id="products-search" type="search" placeholder="이름에 든 글자">
@@ -104,6 +114,25 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     <p id="products-msg" role="status" aria-live="polite"></p>
     <div id="products-table"></div>
+
+    <!-- 최근 활동 - 함수가 남기는 adminLogs 를 읽기만 합니다 (이 화면은 adminLogs 에 쓰지 않습니다) -->
+    <section id="activity">
+      <h2>최근 활동</h2>
+      <button class="btn ghost" type="button" id="btn-activity">새로 읽기</button>
+      <div id="activity-box"></div>
+    </section>
+
+    <!-- 내리기 확인 창 -->
+    <dialog id="remove-dialog">
+      <form method="dialog">
+        <p id="remove-text"></p>
+        <button class="btn" value="remove">내리기</button>
+        <button class="btn ghost" value="cancel">그만두기</button>
+      </form>
+    </dialog>
+
+    <!-- 내리기 뒤에 화면 아래에 뜨는 한 줄 안내 -->
+    <div id="undo-bar" role="status" aria-live="polite" hidden></div>
   </section>
 </div></main>
 
@@ -119,7 +148,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     getDocsFromServer,
     addDoc,
     updateDoc,
-    serverTimestamp
+    serverTimestamp,
+    deleteField,
+    query,
+    orderBy,
+    limit
   } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
   import {
     getStorage,
@@ -187,7 +220,8 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       isAdmin.textContent = "관리자: " + role;
       isAdmin.hidden = false;
       productsPanel.hidden = false;
-      paintTable();
+      // 최근 활동의 상품 이름은 읽어 둔 상품에서 찾으므로, 상품을 읽은 뒤에 읽습니다
+      paintTable().then(paintActivity);
     } else {
       noRole.hidden = false;
     }
@@ -323,6 +357,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     const shown = allProducts.filter(({ data }) => {
       if (view.filter === "soldout" && data.stock !== 0) return false;
       if (view.filter === "hidden" && data.isVisible !== false) return false;
+      if (view.filter === "deleted" && data.deletedAt == null) return false;
       // 영어는 대소문자를 가리지 않습니다
       if (word && !String(data.name ?? "").toLowerCase().includes(word)) return false;
       return true;
@@ -339,7 +374,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     const table = document.createElement("table");
     table.className = "cart";
     const head = table.insertRow();
-    ["문서 ID", "사진", "name", "price", "stock", "품절", "노출", "", "결과"].forEach(text => {
+    ["문서 ID", "사진", "name", "price", "stock", "품절", "노출", "", "", "결과"].forEach(text => {
       const th = document.createElement("th");
       th.textContent = text;
       head.append(th);
@@ -373,6 +408,101 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     renderTable();
   });
 
+  /* --- 내리기 · 되돌리기 - 상품 문서를 진짜로 지우지 않고 deletedAt 과 isVisible 만 바꿉니다 --- */
+  const removeDialog = document.querySelector("#remove-dialog");
+  const undoBar = document.querySelector("#undo-bar");
+
+  // 확인 창을 띄우고, 누른 버튼 값("remove" 또는 "cancel")을 돌려줍니다. Esc 로 닫으면 "" 입니다
+  function askRemove(name) {
+    document.querySelector("#remove-text").textContent = "『" + name + "』을 가게에서 내립니다";
+    removeDialog.returnValue = "";
+    removeDialog.showModal();
+    return new Promise(resolve => {
+      removeDialog.addEventListener("close", () => resolve(removeDialog.returnValue), { once: true });
+    });
+  }
+
+  // 되돌리기 - deletedAt 필드를 아예 지우고 isVisible 을 true 로
+  async function restoreProduct(id, data) {
+    await updateDoc(doc(db, "products", id), { deletedAt: deleteField(), isVisible: true });
+    delete data.deletedAt;
+    data.isVisible = true;
+  }
+
+  // 화면 아래 한 줄 안내. target 이 있으면 「되돌리기」 버튼을 함께 둡니다
+  function showUndoBar(text, target) {
+    const line = document.createElement("p");
+    line.textContent = text;
+    undoBar.replaceChildren(line);
+    if (target) {
+      const undoBtn = document.createElement("button");
+      undoBtn.type = "button";
+      undoBtn.className = "btn ghost";
+      undoBtn.textContent = "되돌리기";
+      undoBtn.addEventListener("click", async () => {
+        undoBtn.disabled = true;
+        try {
+          await restoreProduct(target.id, target.data);
+          showUndoBar("『" + String(target.data.name ?? "") + "』을 가게에 되돌렸습니다", null);
+          renderTable();
+        } catch (error) {
+          undoBtn.disabled = false;
+          const box = document.createElement("div");
+          undoBar.append(box);
+          showError(error, box);
+        }
+      });
+      undoBar.append(undoBtn);
+    }
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "btn ghost";
+    closeBtn.textContent = "닫기";
+    closeBtn.addEventListener("click", () => { undoBar.hidden = true; });
+    undoBar.append(closeBtn);
+    undoBar.hidden = false;
+  }
+
+  /* --- 최근 활동 - adminLogs 를 at 이 최신인 것부터 열 줄 읽습니다 (읽기만 합니다) --- */
+  const activityBox = document.querySelector("#activity-box");
+
+  async function paintActivity() {
+    activityBox.replaceChildren();
+    try {
+      const snap = await getDocsFromServer(query(collection(db, "adminLogs"), orderBy("at", "desc"), limit(10)));
+      // 상품 이름은 한 번 읽어 둔 상품에서 productId 로 찾습니다
+      const names = new Map(allProducts.map(({ id, data }) => [id, data.name]));
+      const table = document.createElement("table");
+      table.className = "cart";
+      const head = table.insertRow();
+      ["시각", "상품 이름", "action", "changedKeys"].forEach(text => {
+        const th = document.createElement("th");
+        th.textContent = text;
+        head.append(th);
+      });
+      snap.forEach(d => {
+        const log = d.data();
+        const row = table.insertRow();
+        const at = log.at && typeof log.at.toDate === "function" ? log.at.toDate().toLocaleString("ko-KR") : "";
+        const name = names.has(log.productId) ? String(names.get(log.productId) ?? "") : "(찾지 못함: " + String(log.productId ?? "") + ")";
+        const keys = Array.isArray(log.changedKeys) ? log.changedKeys.join(", ") : String(log.changedKeys ?? "");
+        // Firestore 에서 온 값은 글자로만 넣습니다
+        [at, name, String(log.action ?? ""), keys].forEach(text => {
+          row.insertCell().textContent = text;
+        });
+      });
+      if (snap.empty) {
+        showOk(activityBox, "아직 활동이 없습니다");
+      } else {
+        activityBox.replaceChildren(table);
+      }
+    } catch (error) {
+      showError(error, activityBox);
+    }
+  }
+
+  document.querySelector("#btn-activity").addEventListener("click", paintActivity);
+
   // 상품 한 줄. Firestore 에서 온 값은 글자로만 넣습니다
   function addRow(table, id, data) {
     const row = table.insertRow();
@@ -403,10 +533,49 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     editBtn.textContent = "고치기";
     row.insertCell().append(editBtn);
 
+    // 내리기 - 「내린 상품」 필터에서는 그 자리에 「되돌리기」 를 둡니다
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn ghost";
+    removeBtn.textContent = view.filter === "deleted" ? "되돌리기" : "내리기";
+    row.insertCell().append(removeBtn);
+
     // 저장 결과나 오류를 그 줄 옆에 보여 주는 칸
     const result = row.insertCell();
 
     const ref = doc(db, "products", id);
+
+    removeBtn.addEventListener("click", async () => {
+      if (view.filter === "deleted") {
+        removeBtn.disabled = true;
+        try {
+          await restoreProduct(id, data);
+          showUndoBar("『" + String(data.name ?? "") + "』을 가게에 되돌렸습니다", null);
+          renderTable();
+        } catch (error) {
+          showError(error, result);
+          removeBtn.disabled = false;
+        }
+        return;
+      }
+
+      const answer = await askRemove(String(data.name ?? ""));
+      if (answer !== "remove") return;
+      removeBtn.disabled = true;
+      try {
+        // deletedAt 은 내 컴퓨터 시각이 아니라 서버 시각으로 적습니다. 문서는 지우지 않습니다
+        await updateDoc(ref, { deletedAt: serverTimestamp(), isVisible: false });
+        // 화면이 가진 값도 맞춰 둡니다 (서버 시각 값은 다음에 읽을 때 들어옵니다)
+        data.deletedAt = true;
+        data.isVisible = false;
+        visible.checked = false;
+        showOk(result, "내렸습니다");
+        showUndoBar("『" + String(data.name ?? "") + "』을 가게에서 내렸습니다", { id, data });
+      } catch (error) {
+        showError(error, result);
+      }
+      removeBtn.disabled = false;
+    });
 
     // 품절 토글 - 켜면 stock 을 0 으로, 끄면 재고 숫자를 물어 그 숫자(1 이상 정수)로
     soldOut.addEventListener("change", async () => {
@@ -463,7 +632,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       }
       editRow = table.insertRow(row.rowIndex + 1);
       const cell = editRow.insertCell();
-      cell.colSpan = 9;
+      cell.colSpan = 10;
 
       const form = document.createElement("form");
       form.className = "pay";
