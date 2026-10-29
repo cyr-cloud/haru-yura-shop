@@ -34,6 +34,9 @@
   #order-detail dd{margin:0;white-space:pre-wrap}
   #btn-orders-more{margin:16px 0 96px}
   #status-dialog .btn{margin:0 8px 0 0}
+  /* 매출 탭 */
+  #sales-chart-box{position:relative;height:320px;margin:0 0 24px}
+  #sales-panel{margin:0 0 96px}
 </style>
 
 <!-- 동의 배너 - 태그 관리자보다 먼저 읽혀야 합니다 -->
@@ -87,6 +90,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <div id="admin-tabs" role="group" aria-label="탭" hidden>
     <button class="btn" type="button" data-tab="products" aria-pressed="true">상품</button>
     <button class="btn ghost" type="button" data-tab="orders" aria-pressed="false">주문</button>
+    <button class="btn ghost" type="button" data-tab="sales" aria-pressed="false">매출</button>
   </div>
 
   <!-- 상품 표 - 입구가 「관리자: staff」 또는 「관리자: admin」 일 때만 hidden 이 풀립니다 -->
@@ -185,7 +189,20 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </form>
     </dialog>
   </section>
+
+  <!-- 매출 - 「매출」 탭을 누르면 보입니다. 함수가 매일 적는 dailyStats 만 읽습니다 (orders 는 읽지 않습니다) -->
+  <section id="sales-panel" hidden>
+    <h2>매출</h2>
+    <p id="sales-lead"></p>
+    <p id="sales-counted"></p>
+    <div id="sales-msg" role="status" aria-live="polite"></div>
+    <div id="sales-chart-box"><canvas id="sales-chart" aria-label="최근 7일 매출 막대 차트" role="img"></canvas></div>
+    <div id="sales-table"></div>
+  </section>
 </div></main>
+
+<!-- 매출 막대 차트 - Chart.js 를 버전을 고정한 주소로 불러옵니다 (폴더에 설치하지 않습니다) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
 <!-- 로그인 상태를 묻는 자리는 assets/auth.js 한 곳뿐입니다. 여기서는 결과만 받아 씁니다. -->
 <script type="module">
@@ -230,12 +247,15 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   const productsPanel = document.querySelector("#products-panel");
   const ordersPanel = document.querySelector("#orders-panel");
+  const salesPanel = document.querySelector("#sales-panel");
   const adminTabs = document.querySelector("#admin-tabs");
 
   // 지금 보고 있는 탭 - "products" 또는 "orders"
   let currentTab = "products";
   // 주문은 「주문」 탭을 처음 열 때 읽습니다
   let ordersLoaded = false;
+  // 매출도 「매출」 탭을 처음 열 때 읽습니다
+  let salesLoaded = false;
 
   // 판단을 여러 번 불렀을 때 마지막 것만 화면에 그리기 위한 번호
   let turn = 0;
@@ -261,6 +281,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     noRole.hidden = true;
     productsPanel.hidden = true;
     ordersPanel.hidden = true;
+    salesPanel.hidden = true;
     adminTabs.hidden = true;
   }
 
@@ -269,6 +290,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     currentTab = name;
     productsPanel.hidden = name !== "products";
     ordersPanel.hidden = name !== "orders";
+    salesPanel.hidden = name !== "sales";
     adminTabs.querySelectorAll("[data-tab]").forEach(b => {
       const on = b.dataset.tab === name;
       b.setAttribute("aria-pressed", String(on));
@@ -277,6 +299,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     if (name === "orders" && !ordersLoaded) {
       ordersLoaded = true;
       loadOrders(true);
+    }
+    if (name === "sales" && !salesLoaded) {
+      salesLoaded = true;
+      loadSales();
     }
   }
 
@@ -1097,6 +1123,108 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     loadOrders(true);
   });
   ordersMore.addEventListener("click", () => loadOrders(false));
+
+  /* ===========================================================
+     매출 탭 - 함수(countDailyOrders)가 매일 00:05 에 적는 dailyStats 만 읽습니다.
+     어제(서울 날짜)부터 거꾸로 7일, 날짜마다 문서 한 장씩. 오늘 숫자를 주문에서 세지 않습니다.
+     =========================================================== */
+  const salesLead = document.querySelector("#sales-lead");
+  const salesCounted = document.querySelector("#sales-counted");
+  const salesMsg = document.querySelector("#sales-msg");
+  const salesTable = document.querySelector("#sales-table");
+  let salesChart = null;
+
+  // 어제(서울 날짜)부터 거꾸로 7일의 문서 이름 - 오래된 날이 앞. 함수와 같은 방식(UTC+9)으로 셉니다
+  function lastSevenDays() {
+    const nowSeoul = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const y = nowSeoul.getUTCFullYear();
+    const m = nowSeoul.getUTCMonth();
+    const d = nowSeoul.getUTCDate();
+    const ids = [];
+    for (let back = 7; back >= 1; back--) {
+      const day = new Date(Date.UTC(y, m, d - back));
+      ids.push(String(day.getUTCFullYear()) + String(day.getUTCMonth() + 1).padStart(2, "0") + String(day.getUTCDate()).padStart(2, "0"));
+    }
+    return ids;
+  }
+
+  // 20261028 → 2026-10-28
+  const dayText = id => id.slice(0, 4) + "-" + id.slice(4, 6) + "-" + id.slice(6, 8);
+
+  async function loadSales() {
+    salesMsg.textContent = "매출을 읽는 중입니다";
+    salesLead.textContent = "";
+    salesCounted.textContent = "";
+    salesTable.replaceChildren();
+
+    const ids = lastSevenDays();
+    let days;
+    try {
+      const snaps = await Promise.all(ids.map(id => getDocFromServer(doc(db, "dailyStats", id))));
+      days = ids.map((id, i) => ({ id, data: snaps[i].exists() ? snaps[i].data() : null }));
+    } catch (error) {
+      showOrderError(salesMsg, "매출을 읽지 못했습니다", error);
+      return;
+    }
+    salesMsg.textContent = "";
+
+    // 가장 최근 문서 - 뒤에서부터 찾습니다
+    const latest = [...days].reverse().find(d => d.data);
+    if (latest) {
+      salesLead.textContent = dayText(latest.id) + "까지의 매출입니다 - 매일 00:05에 전날을 셉니다";
+      salesCounted.textContent = "마지막으로 센 시각: " + timeText(latest.data.countedAt);
+    } else {
+      salesLead.textContent = "최근 7일 집계 문서가 없습니다 - 매일 00:05에 전날을 셉니다";
+    }
+
+    // 표 - 날짜 · 건수 · 매출 · 센 시각 (canceledCount 가 있는 날이 있으면 칸을 하나 더 둡니다)
+    const hasCanceled = days.some(d => d.data && d.data.canceledCount != null);
+    const table = document.createElement("table");
+    table.className = "cart";
+    const head = table.insertRow();
+    ["날짜", "건수", "매출", "센 시각"].concat(hasCanceled ? ["취소 건수"] : []).forEach(text => {
+      const th = document.createElement("th");
+      th.textContent = text;
+      head.append(th);
+    });
+    days.forEach(({ id, data }) => {
+      const row = table.insertRow();
+      row.insertCell().textContent = dayText(id);
+      if (!data) {
+        const cell = row.insertCell();
+        cell.colSpan = hasCanceled ? 4 : 3;
+        cell.textContent = "집계 없음";
+        return;
+      }
+      // Firestore 에서 온 값은 글자로만 넣습니다
+      [String(data.orderCount ?? ""), String(data.totalSales ?? ""), timeText(data.countedAt)]
+        .concat(hasCanceled ? [String(data.canceledCount ?? "")] : [])
+        .forEach(text => { row.insertCell().textContent = text; });
+    });
+    salesTable.replaceChildren(table);
+
+    // 막대 차트 - 문서가 없는 날은 null 로 두어 막대를 그리지 않고, 날짜 아래에 「집계 없음」
+    try {
+      if (typeof window.Chart !== "function") throw new Error("Chart.js 를 불러오지 못했습니다");
+      if (salesChart) salesChart.destroy();
+      salesChart = new window.Chart(document.querySelector("#sales-chart"), {
+        type: "bar",
+        data: {
+          labels: days.map(d => (d.data ? dayText(d.id) : [dayText(d.id), "집계 없음"])),
+          datasets: [{
+            label: "매출 (totalSales)",
+            data: days.map(d => (d.data && typeof d.data.totalSales === "number" ? d.data.totalSales : null))
+          }]
+        },
+        options: {
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    } catch (error) {
+      showOrderError(salesMsg, "차트를 그리지 못했습니다", error);
+    }
+  }
 </script>
 </body>
 </html>
